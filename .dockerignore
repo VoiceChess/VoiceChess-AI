@@ -1,0 +1,34 @@
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.mypy_cache
+*.egg-info
+dist
+build
+venv
+
+# IDE
+.vscode
+.idea
+.DS_Store
+.claude
+
+# Git
+.git
+.gitignore
+
+# Environment
+.env
+
+# Resources
+resources/
+
+# Documentation
+*.md
+!README.md
+
+# Other
+*.html
+*.zip

@@ -1,0 +1,36 @@
+# Python
+venv
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.mypy_cache
+*.egg-info
+dist
+build
+
+# IDE
+.vscode
+.idea
+.DS_Store
+
+# Environment
+.env
+
+# Models
+*.pth
+models/*.pth
+models/*.png
+!models/best_model_bbox_0.958_2024-01-28-22-49-40.pth
+!models/best_model_fen_0.953_2024-02-03-13-49-31.pth
+!models/best_model_orientation_0.987_2024-02-04-17-34-05.pth
+!models/best_model_image_rotation_0.996_2024-04-14-22-59-55.pth
+!models/best_model_existence_0.998_2024-04-16-23-44-48.pth
+!models/best_model_fen_0.943_2024-04-19-09-31-24.pth
+
+# Resources
+resources/
+*.html
+*.zip
+
+/.claude
