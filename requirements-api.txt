@@ -1,7 +1,13 @@
+# Core - MUST be installed first
+numpy>=1.24,<2.0
+
+# API Framework
 fastapi
 uvicorn[standard]
 python-multipart
 python-dotenv
+
+# Dependencies
 matplotlib
 scikit-image
 tqdm
