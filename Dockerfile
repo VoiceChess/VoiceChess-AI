@@ -31,6 +31,9 @@ COPY . .
 # Install the package
 RUN pip install --no-cache-dir -e .
 
+# Pre-download PyTorch models to cache them in image
+RUN python preload_models.py
+
 # Expose port
 EXPOSE 5000
 
