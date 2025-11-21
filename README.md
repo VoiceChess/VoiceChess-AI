@@ -127,7 +127,10 @@ This project is ready for deployment on Railway, Render, or Fly.io:
    - `PORT` - Default: 5000
 3. **Deploy** - The Dockerfile will handle everything
 
-**Important**: Models are pre-downloaded during build, so your first deployment will take longer (~5-10 minutes) but subsequent requests will be fast.
+**Important**:
+- PyTorch models are **copied from local `models/` folder** during build (mobilenet & regnet)
+- First build takes ~5-7 minutes (compiling scikit-image)
+- All subsequent requests are **instant** - no downloads!
 
 ### Deployment Platforms
 

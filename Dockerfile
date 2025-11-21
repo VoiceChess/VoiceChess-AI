@@ -31,8 +31,18 @@ COPY . .
 # Install the package
 RUN pip install --no-cache-dir -e .
 
+# Set PyTorch cache directory to a location inside the image
+ENV TORCH_HOME=/app/.torch
+ENV XDG_CACHE_HOME=/app/.cache
+
+# Create cache directories
+RUN mkdir -p /app/.torch /app/.cache
+
 # Pre-download PyTorch models to cache them in image
 RUN python preload_models.py
+
+# Verify models are cached
+RUN ls -lah /app/.torch/hub/checkpoints/ || echo "Warning: Models may not be cached"
 
 # Expose port
 EXPOSE 5000
