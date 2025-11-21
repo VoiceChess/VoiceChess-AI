@@ -47,12 +47,26 @@ Server will run at `http://localhost:5000`
 
 Detects chess board from base64 image and returns FEN notation.
 
-**Request:**
+**Request (Fast - default):**
 
 ```bash
 curl -X POST http://localhost:5000/api/detect \
   -H "Content-Type: application/json" \
-  -d '{"img_b64": "data:image/png;base64,iVBORw0KGgoAAAANSUh..."}'
+  -d '{
+    "img_b64": "data:image/png;base64,iVBORw0KGgoAAAANSUh...",
+    "num_tries": 3
+  }'
+```
+
+**Request (High Accuracy):**
+
+```bash
+curl -X POST http://localhost:5000/api/detect \
+  -H "Content-Type: application/json" \
+  -d '{
+    "img_b64": "data:image/png;base64,iVBORw0KGgoAAAANSUh...",
+    "num_tries": 10
+  }'
 ```
 
 **Response:**
@@ -62,9 +76,28 @@ curl -X POST http://localhost:5000/api/detect \
   "success": true,
   "fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
   "rotation_angle": 0,
-  "is_flipped": false
+  "is_flipped": false,
+  "debug": {
+    "num_tries": 3,
+    "timings": {
+      "decode": 0.05,
+      "inference": 5.2,
+      "total": 5.25
+    },
+    "device": "cpu",
+    "image_size": "800x600"
+  }
 }
 ```
+
+**Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `img_b64` | string | Required | Base64 encoded image |
+| `num_tries` | int | 3 | Inference attempts (1-20)<br>• 1-2: Fast (~2-4s)<br>• 3-5: Balanced (~5-10s) ✅<br>• 10+: Accurate (~20-30s) |
+| `auto_rotate_image` | bool | true | Auto-detect image rotation |
+| `auto_rotate_board` | bool | true | Auto-detect board perspective |
 
 **Error Response:**
 
