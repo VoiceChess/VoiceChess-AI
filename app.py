@@ -28,7 +28,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 class DetectRequest(BaseModel):
     img_b64: str
-    num_tries: Optional[int] = 3  # Default 3 for speed, can override for accuracy
+    num_tries: Optional[int] = 15  # Default 3 for speed, can override for accuracy
     auto_rotate_image: Optional[bool] = True
     auto_rotate_board: Optional[bool] = True
 
