@@ -1,0 +1,60 @@
+name: Deploy to GCP VM
+
+on:
+  push:
+    branches:
+      - main  # Trigger pas push ke branch main
+  workflow_dispatch:  # Manual trigger dari GitHub UI
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Deploy to GCP VM
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.GCP_VM_HOST }}
+          username: ${{ secrets.GCP_VM_USERNAME }}
+          key: ${{ secrets.GCP_VM_SSH_KEY }}
+          script: |
+            # Navigate to project directory
+            cd ~/VoiceChessAIv2
+            
+            # Pull latest code
+            git pull origin main
+            
+            # Activate virtual environment
+            source venv/bin/activate
+            
+            # Install/update dependencies (if requirements changed)
+            pip install -r requirements-api.txt
+            
+            # Restart service
+            sudo systemctl restart voicechess
+            
+            # Wait a bit for service to start
+            sleep 5
+            
+            # Check service status
+            sudo systemctl status voicechess --no-pager
+            
+            echo "✅ Deployment completed successfully!"
+
+      - name: Verify deployment
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.GCP_VM_HOST }}
+          username: ${{ secrets.GCP_VM_USERNAME }}
+          key: ${{ secrets.GCP_VM_SSH_KEY }}
+          script: |
+            # Test if API is responding
+            sleep 3
+            curl -f http://localhost:5000/ || echo "⚠️ API health check failed"
+            
+            # Show recent logs
+            echo "📝 Recent logs:"
+            sudo journalctl -u voicechess -n 20 --no-pager

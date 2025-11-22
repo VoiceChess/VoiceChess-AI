@@ -117,7 +117,7 @@ async def detect(request: DetectRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == '__main__':
-    PORT = int(os.getenv("PORT", 5000))
+    PORT = int(os.getenv("PORT", 80))
     print(f"Device: {device.type}")
     print(f"Server: http://localhost:{PORT}")
     print(f"Docs: http://localhost:{PORT}/docs")
