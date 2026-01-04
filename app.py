@@ -26,6 +26,15 @@ app.add_middleware(
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+@app.get("/")
+async def health_check():
+    """Health check endpoint"""
+    return {
+        "status": "ok",
+        "service": "VoiceChessAI",
+        "device": device.type
+    }
+
 class DetectRequest(BaseModel):
     img_b64: str
     num_tries: Optional[int] = 5  # Default 3 for speed, can override for accuracy
