@@ -10,9 +10,8 @@ on:
   workflow_dispatch:
 
 jobs:
-  # CI Stage - Build and Test
   continuous-integration:
-    name: CI - Build & Test
+    name: Build and Test
     runs-on: ubuntu-latest
 
     steps:
@@ -22,7 +21,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.11"
 
       - name: Cache dependencies
         uses: actions/cache@v4
@@ -69,7 +68,6 @@ jobs:
           path: voicechess-ai.tar.gz
           retention-days: 1
 
-  # CD Stage - Deploy to VPS
   continuous-deployment:
     name: CD - Deploy to VPS
     runs-on: ubuntu-latest
@@ -92,7 +90,7 @@ jobs:
           username: ${{ secrets.VPS_USERNAME }}
           key: ${{ secrets.VPS_SSH_KEY }}
           source: "voicechess-ai.tar.gz,docker-compose.yml,.env.example"
-          target: "/root/voicechess"
+          target: "/root/AI-VoiceChess"
 
       - name: Deploy and Run on VPS
         uses: appleboy/ssh-action@master
@@ -101,7 +99,7 @@ jobs:
           username: ${{ secrets.VPS_USERNAME }}
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
-            cd /root/voicechess
+            cd /root/AI-VoiceChess
 
             # Load Docker image
             docker load < voicechess-ai.tar.gz
