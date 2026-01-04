@@ -23,7 +23,7 @@ RUN pip install --no-cache-dir torch torchvision --index-url https://download.py
 RUN pip install --no-cache-dir --no-binary scikit-image scikit-image
 
 # Install other dependencies
-RUN pip install --no-cache-dir fastapi uvicorn[standard] python-multipart python-dotenv matplotlib tqdm python-chess pyfastnoisesimd
+RUN pip install --no-cache-dir fastapi uvicorn[standard] python-multipart python-dotenv matplotlib tqdm python-chess
 
 # Copy application files
 COPY . .

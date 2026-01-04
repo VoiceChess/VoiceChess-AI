@@ -17,8 +17,8 @@ services:
       retries: 3
       start_period: 40s
     volumes:
-      # Uncomment jika mau persist model cache
-      # - ./models:/app/.torch
+      # Model cache persistence
+      - ./models:/app/.torch
       - /dev/null:/dev/null
     logging:
       driver: "json-file"

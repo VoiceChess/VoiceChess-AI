@@ -12,4 +12,3 @@ matplotlib
 scikit-image
 tqdm
 python-chess
-pyfastnoisesimd
