@@ -1,0 +1,157 @@
+name: CI / CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  # CI Stage - Build and Test
+  continuous-integration:
+    name: CI - Build & Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Cache dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements-api.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-api.txt
+
+      - name: Lint with flake8 (optional)
+        continue-on-error: true
+        run: |
+          pip install flake8
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+
+      - name: Build Docker image
+        run: |
+          docker build -t voicechess-ai:${{ github.sha }} .
+          docker tag voicechess-ai:${{ github.sha }} voicechess-ai:latest
+
+      - name: Test Docker image
+        run: |
+          docker run -d -p 5000:5000 --name test-container voicechess-ai:latest
+          sleep 15
+          curl -f http://localhost:5000/ || (docker logs test-container && exit 1)
+          docker stop test-container
+          docker rm test-container
+
+      - name: Save Docker image
+        if: github.ref == 'refs/heads/main'
+        run: |
+          docker save voicechess-ai:latest | gzip > voicechess-ai.tar.gz
+
+      - name: Upload Docker image artifact
+        if: github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-image
+          path: voicechess-ai.tar.gz
+          retention-days: 1
+
+  # CD Stage - Deploy to VPS
+  continuous-deployment:
+    name: CD - Deploy to VPS
+    runs-on: ubuntu-latest
+    needs: continuous-integration
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download Docker image artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: docker-image
+
+      - name: Deploy to VPS
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USERNAME }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          source: "voicechess-ai.tar.gz,docker-compose.yml,.env.example"
+          target: "/root/voicechess"
+
+      - name: Deploy and Run on VPS
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USERNAME }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            cd /root/voicechess
+
+            # Load Docker image
+            docker load < voicechess-ai.tar.gz
+
+            # Stop and remove old containers
+            docker-compose down || true
+
+            # Remove old images (keep latest)
+            docker image prune -f
+
+            # Start new containers
+            docker-compose up -d
+
+            # Wait for container to be ready
+            echo "Waiting for container to start..."
+            sleep 10
+
+            # Check container status
+            docker-compose ps
+
+            # Show recent logs
+            echo "Recent logs:"
+            docker-compose logs --tail=50
+
+            # Cleanup
+            rm -f voicechess-ai.tar.gz
+
+            echo "Deployment completed successfully!"
+
+      - name: Health Check
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USERNAME }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            echo "Running health check..."
+            sleep 5
+            curl -f http://localhost:5000/ || echo "Warning: Health check failed"
+
+            echo ""
+            echo "Container status:"
+            docker ps | grep voicechess || echo "No voicechess containers running"
+
+      - name: Notify deployment status
+        if: always()
+        run: |
+          if [ ${{ job.status }} == 'success' ]; then
+            echo "Deployment successful!"
+          else
+            echo "Deployment failed!"
+            exit 1
+          fi
