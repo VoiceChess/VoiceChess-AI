@@ -2,20 +2,36 @@ import os
 
 os.environ.setdefault("CUDA_VISIBLE_DEVICES", "")
 
-from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from typing import Optional
-from PIL import Image
-import io
 import base64
+import io
+import json
+import logging
+import time
+from typing import Optional
+
 import torch
 import uvicorn
-import time
 from dotenv import load_dotenv
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
+from PIL import Image
+from pydantic import BaseModel
+
 from chess_diagram_to_fen import get_fen
 
 load_dotenv()
+
+logging.basicConfig(
+    level=os.getenv("LOG_LEVEL", "INFO").upper(),
+    format="%(asctime)s %(levelname)s %(message)s",
+)
+logger = logging.getLogger("voicechess.fen")
+
+
+def log_event(event: str, **fields) -> None:
+    payload = {"event": event, **fields}
+    logger.info(json.dumps(payload, default=str, ensure_ascii=False))
+
 
 app = FastAPI(title="Chess to FEN API")
 
@@ -29,6 +45,43 @@ app.add_middleware(
 
 device = torch.device("cpu")
 torch.set_num_threads(int(os.getenv("TORCH_NUM_THREADS", "1")))
+
+
+@app.middleware("http")
+async def request_logger(request: Request, call_next):
+    start = time.perf_counter()
+    try:
+        response = await call_next(request)
+    except Exception as error:
+        duration_ms = round((time.perf_counter() - start) * 1000, 2)
+        log_event(
+            "request_failed",
+            method=request.method,
+            path=request.url.path,
+            duration_ms=duration_ms,
+            error=str(error),
+        )
+        raise
+
+    duration_ms = round((time.perf_counter() - start) * 1000, 2)
+    log_event(
+        "request_completed",
+        method=request.method,
+        path=request.url.path,
+        status=response.status_code,
+        duration_ms=duration_ms,
+    )
+    return response
+
+
+@app.on_event("startup")
+async def startup() -> None:
+    log_event(
+        "startup",
+        device=device.type,
+        port=os.getenv("PORT", "5000"),
+        torch_num_threads=torch.get_num_threads(),
+    )
 
 
 @app.get("/")
@@ -62,12 +115,14 @@ async def detect(request: DetectRequest):
     total_start = time.time()
 
     try:
-        print(f"\n{'=' * 60}")
         request.num_tries = max(1, min(request.num_tries or 3, 5))
-        print(f"New request - num_tries={request.num_tries}")
-        print(f"{'=' * 60}")
+        log_event(
+            "fen_detect_started",
+            num_tries=request.num_tries,
+            auto_rotate_image=request.auto_rotate_image,
+            auto_rotate_board=request.auto_rotate_board,
+        )
 
-        # 1. Decode base64 image
         decode_start = time.time()
         img_b64 = request.img_b64
         if "," in img_b64:
@@ -78,11 +133,15 @@ async def detect(request: DetectRequest):
         img = img.convert("RGB")
         img.thumbnail((1200, 1200))
         timings["decode"] = round(time.time() - decode_start, 2)
-        print(f"Image decoded: {timings['decode']}s | Size: {img.size}")
+        log_event(
+            "fen_image_decoded",
+            decode_ms=round(timings["decode"] * 1000, 2),
+            width=img.size[0],
+            height=img.size[1],
+        )
 
-        # 2. Run chess detection
         inference_start = time.time()
-        print(f"Starting inference (num_tries={request.num_tries})...")
+        log_event("fen_inference_started", num_tries=request.num_tries)
 
         result = get_fen(
             img=img,
@@ -92,22 +151,30 @@ async def detect(request: DetectRequest):
         )
 
         timings["inference"] = round(time.time() - inference_start, 2)
-        print(f"Inference completed: {timings['inference']}s")
+        log_event(
+            "fen_inference_completed",
+            inference_ms=round(timings["inference"] * 1000, 2),
+        )
 
-        # 3. Check results
         if result is None or result.fen is None:
             timings["total"] = round(time.time() - total_start, 2)
-            print(f"Detection failed - Total time: {timings['total']}s")
+            log_event(
+                "fen_detect_failed",
+                reason="no_board_detected",
+                total_ms=round(timings["total"] * 1000, 2),
+            )
             raise HTTPException(status_code=400, detail="Could not detect chess board")
 
         timings["total"] = round(time.time() - total_start, 2)
 
-        print("Success")
-        print(f"   FEN: {result.fen}")
-        print(f"   Rotation: {result.image_rotation_angle}°")
-        print(f"   Flipped: {result.board_is_flipped}")
-        print(f"Total time: {timings['total']}s")
-        print(f"{'=' * 60}\n")
+        log_event(
+            "fen_detect_completed",
+            fen=result.fen,
+            rotation_angle=result.image_rotation_angle,
+            is_flipped=result.board_is_flipped,
+            total_ms=round(timings["total"] * 1000, 2),
+            timings=timings,
+        )
 
         return {
             "success": True,
@@ -126,15 +193,16 @@ async def detect(request: DetectRequest):
         raise
     except Exception as e:
         timings["total"] = round(time.time() - total_start, 2)
-        print(f"Detection error: {type(e).__name__}: {str(e)}")
-        print(f"Failed after: {timings['total']}s")
-        print(f"{'=' * 60}\n")
+        log_event(
+            "fen_detect_failed",
+            error_type=type(e).__name__,
+            error=str(e),
+            total_ms=round(timings["total"] * 1000, 2),
+        )
         raise HTTPException(status_code=500, detail="Chess board analysis failed")
 
 
 if __name__ == "__main__":
     PORT = int(os.getenv("PORT", 80))
-    print(f"Device: {device.type}")
-    print(f"Server: http://localhost:{PORT}")
-    print(f"Docs: http://localhost:{PORT}/docs")
+    log_event("server_start", device=device.type, port=PORT)
     uvicorn.run(app, host="0.0.0.0", port=PORT)
