@@ -1,3 +1,7 @@
+import os
+
+os.environ.setdefault("CUDA_VISIBLE_DEVICES", "")
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -7,7 +11,6 @@ import io
 import base64
 import torch
 import uvicorn
-import os
 import time
 from dotenv import load_dotenv
 from chess_diagram_to_fen import get_fen
@@ -24,22 +27,22 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = torch.device("cpu")
+torch.set_num_threads(int(os.getenv("TORCH_NUM_THREADS", "1")))
+
 
 @app.get("/")
 async def health_check():
     """Health check endpoint"""
-    return {
-        "status": "ok",
-        "service": "VoiceChessAI",
-        "device": device.type
-    }
+    return {"status": "ok", "service": "VoiceChessAI", "device": device.type}
+
 
 class DetectRequest(BaseModel):
     img_b64: str
     num_tries: Optional[int] = 5  # Default 3 for speed, can override for accuracy
     auto_rotate_image: Optional[bool] = True
     auto_rotate_board: Optional[bool] = True
+
 
 @app.post("/api/detect")
 async def detect(request: DetectRequest):
@@ -59,49 +62,52 @@ async def detect(request: DetectRequest):
     total_start = time.time()
 
     try:
-        print(f"\n{'='*60}")
-        print(f"🎯 New request - num_tries={request.num_tries}")
-        print(f"{'='*60}")
+        print(f"\n{'=' * 60}")
+        request.num_tries = max(1, min(request.num_tries or 3, 5))
+        print(f"New request - num_tries={request.num_tries}")
+        print(f"{'=' * 60}")
 
         # 1. Decode base64 image
         decode_start = time.time()
         img_b64 = request.img_b64
-        if ',' in img_b64:
-            img_b64 = img_b64.split(',')[1]
+        if "," in img_b64:
+            img_b64 = img_b64.split(",")[1]
 
         img_bytes = base64.b64decode(img_b64)
         img = Image.open(io.BytesIO(img_bytes))
-        timings['decode'] = round(time.time() - decode_start, 2)
-        print(f"✓ Image decoded: {timings['decode']}s | Size: {img.size}")
+        img = img.convert("RGB")
+        img.thumbnail((1200, 1200))
+        timings["decode"] = round(time.time() - decode_start, 2)
+        print(f"Image decoded: {timings['decode']}s | Size: {img.size}")
 
         # 2. Run chess detection
         inference_start = time.time()
-        print(f"🔍 Starting inference (num_tries={request.num_tries})...")
+        print(f"Starting inference (num_tries={request.num_tries})...")
 
         result = get_fen(
             img=img,
             num_tries=request.num_tries,
             auto_rotate_image=request.auto_rotate_image,
-            auto_rotate_board=request.auto_rotate_board
+            auto_rotate_board=request.auto_rotate_board,
         )
 
-        timings['inference'] = round(time.time() - inference_start, 2)
-        print(f"✓ Inference completed: {timings['inference']}s")
+        timings["inference"] = round(time.time() - inference_start, 2)
+        print(f"Inference completed: {timings['inference']}s")
 
         # 3. Check results
         if result is None or result.fen is None:
-            timings['total'] = round(time.time() - total_start, 2)
-            print(f"❌ Detection failed - Total time: {timings['total']}s")
+            timings["total"] = round(time.time() - total_start, 2)
+            print(f"Detection failed - Total time: {timings['total']}s")
             raise HTTPException(status_code=400, detail="Could not detect chess board")
 
-        timings['total'] = round(time.time() - total_start, 2)
+        timings["total"] = round(time.time() - total_start, 2)
 
-        print(f"✅ Success!")
+        print("Success")
         print(f"   FEN: {result.fen}")
         print(f"   Rotation: {result.image_rotation_angle}°")
         print(f"   Flipped: {result.board_is_flipped}")
-        print(f"⏱️  Total time: {timings['total']}s")
-        print(f"{'='*60}\n")
+        print(f"Total time: {timings['total']}s")
+        print(f"{'=' * 60}\n")
 
         return {
             "success": True,
@@ -112,20 +118,21 @@ async def detect(request: DetectRequest):
                 "num_tries": request.num_tries,
                 "timings": timings,
                 "device": device.type,
-                "image_size": f"{img.size[0]}x{img.size[1]}"
-            }
+                "image_size": f"{img.size[0]}x{img.size[1]}",
+            },
         }
 
     except HTTPException:
         raise
     except Exception as e:
-        timings['total'] = round(time.time() - total_start, 2)
-        print(f"❌ Error: {str(e)}")
-        print(f"⏱️  Failed after: {timings['total']}s")
-        print(f"{'='*60}\n")
-        raise HTTPException(status_code=500, detail=str(e))
+        timings["total"] = round(time.time() - total_start, 2)
+        print(f"Detection error: {type(e).__name__}: {str(e)}")
+        print(f"Failed after: {timings['total']}s")
+        print(f"{'=' * 60}\n")
+        raise HTTPException(status_code=500, detail="Chess board analysis failed")
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     PORT = int(os.getenv("PORT", 80))
     print(f"Device: {device.type}")
     print(f"Server: http://localhost:{PORT}")

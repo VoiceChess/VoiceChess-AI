@@ -1,3 +1,7 @@
+import os
+
+os.environ.setdefault("CUDA_VISIBLE_DEVICES", "")
+
 import torch
 from torchvision.transforms import functional
 import matplotlib.pyplot as plt
@@ -20,11 +24,10 @@ from src.bounding_box.inference import get_bbox
 from src import consts, common
 
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = torch.device("cpu")
 
 
 class SomeModel:
-
     def __init__(self, model_class: type, default_path=None) -> None:
         self.model = None
         self.model_path = default_path
@@ -267,7 +270,6 @@ def get_fen(
         result.image_rotation_angle = board_image_rotation(result.cropped_image)
 
         if auto_rotate_image:
-
             result.cropped_image = result.cropped_image.rotate(
                 -rotation_dataset.ROTATIONS[result.image_rotation_angle], expand=True
             )
@@ -281,7 +283,6 @@ def get_fen(
         board = get_board_from_cropped_img(result.cropped_image, num_tries=num_tries)
 
         if board is not None:
-
             result.board_is_flipped = is_board_flipped(board)
 
             if auto_rotate_board and result.board_is_flipped:
@@ -359,7 +360,6 @@ def demo(root_dir: str, shuffle_files: bool):
 
 
 if __name__ == "__main__":
-
     parser = argparse.ArgumentParser(description="TODO")
     parser.add_argument(
         "--dir",
